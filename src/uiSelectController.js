@@ -37,13 +37,9 @@ uis.controller('uiSelectCtrl',
   ctrl.resetSearchInput = true;
   ctrl.multiple = undefined; // Initialized inside uiSelect directive link function
   ctrl.disableChoiceExpression = undefined; // Initialized inside uiSelectChoices directive link function
-<<<<<<< HEAD
   ctrl.taggingElement = undefined;
   ctrl.tagging = {isActivated: false, fct: undefined, equals: angular.equals};
   ctrl.taggingLabel = '(new)';
-=======
-  ctrl.tagging = {isActivated: false, fct: undefined, equals: angular.equals};
->>>>>>> e34bffc5335a8e2f1f547081af89169d98a17453
   ctrl.taggingTokens = {isActivated: false, tokens: undefined};
   ctrl.lockChoiceExpression = undefined; // Initialized inside uiSelectMatch directive link function
   ctrl.clickTriggeredSelect = false;
@@ -372,17 +368,10 @@ uis.controller('uiSelectCtrl',
           // if taggingLabel is disabled, we pull from ctrl.search val
           if ( ctrl.taggingLabel === false ) {
             if ( ctrl.activeIndex < 0 ) {
-<<<<<<< HEAD
 				item = ctrl.tagging.fct !== undefined ? ctrl.tagging.fct(ctrl.search) : ctrl.search;
 				if (!item || ctrl.tagging.equals( ctrl.taggingElement, item ) ) {
 					return;
 				}
-=======
-              item = ctrl.tagging.fct !== undefined ? ctrl.tagging.fct(ctrl.search) : ctrl.search;
-              if (!item || ctrl.tagging.equals( ctrl.items[0], item ) ) {
-                return;
-              }
->>>>>>> e34bffc5335a8e2f1f547081af89169d98a17453
             } else {
               // keyboard nav happened first, user selected from dropdown
               item = ctrl.items[ctrl.activeIndex];
@@ -550,7 +539,6 @@ uis.controller('uiSelectCtrl',
     return processed;
   }
 
-<<<<<<< HEAD
 	function _compareStringCaseInsensitive(val1, val2) {
 		if ( val1 === undefined || val2 === undefined ) {
           return false;
@@ -560,50 +548,6 @@ uis.controller('uiSelectCtrl',
 	
 	// Bind to keyboard shortcuts 
 	ctrl.searchInput.on('keyup', function(e) {
-=======
-  function _findCaseInsensitiveDupe(arr) {
-        if ( arr === undefined || ctrl.search === undefined ) {
-          return false;
-        }
-        var hasDupe = arr.filter( function (origItem) {
-          if ( ctrl.search.toUpperCase() === undefined || origItem === undefined ) {
-            return false;
-          }
-          return origItem.toUpperCase() === ctrl.search.toUpperCase();
-        }).length > 0;
-
-        return hasDupe;
-      }
-      function _findApproxDupe(haystack, needle) {
-        var dupeIndex = -1;
-        if(angular.isArray(haystack)) {
-          var tempArr = angular.copy(haystack);
-          for (var i = 0; i <tempArr.length; i++) {
-            // handle the simple string version of tagging
-            if ( ctrl.tagging.fct === undefined ) {
-              // search the array for the match
-              if ( tempArr[i]+' '+ctrl.taggingLabel === needle ) {
-              dupeIndex = i;
-              }
-            // handle the object tagging implementation
-            } else {
-              var mockObj = tempArr[i];
-              if (angular.isObject(mockObj)) {
-                mockObj.isTag = true;
-              }
-              if ( ctrl.tagging.equals(mockObj, needle) ) {
-                dupeIndex = i;
-              }
-            }
-          }
-        }
-        return dupeIndex;
-      }
-  
-  // Bind to keyboard shortcuts 
-  ctrl.searchInput.on('keyup', function(e) {
-
->>>>>>> e34bffc5335a8e2f1f547081af89169d98a17453
         if ( ! KEY.isVerticalMovement(e.which) ) {
           $scope.$evalAsync( function () {
             ctrl.activeIndex = ctrl.taggingLabel === false ? -1 : 0;
@@ -621,7 +565,6 @@ uis.controller('uiSelectCtrl',
           // taggingLabel === false bypasses all of this
           if (ctrl.taggingLabel === false) return;
 
-<<<<<<< HEAD
 		  var newItem;
           var items = angular.copy( ctrl.items );
           
@@ -679,114 +622,6 @@ uis.controller('uiSelectCtrl',
 			});
 		}
 	});	
-=======
-          var items = angular.copy( ctrl.items );
-          var stashArr = angular.copy( ctrl.items );
-          var newItem;
-          var item;
-          var hasTag = false;
-          var dupeIndex = -1;
-          var tagItems;
-          var tagItem;
-
-          // case for object tagging via transform `ctrl.tagging.fct` function
-          if ( ctrl.tagging.fct !== undefined) {
-            tagItems = ctrl.$filter('filter')(items,{'isTag': true});
-            if ( tagItems.length > 0 ) {
-              tagItem = tagItems[0];
-            }
-            // remove the first element, if it has the `isTag` prop we generate a new one with each keyup, shaving the previous
-            if ( items.length > 0 && tagItem ) {
-              hasTag = true;
-              items = items.slice(1,items.length);
-              stashArr = stashArr.slice(1,stashArr.length);
-            }
-            newItem = ctrl.tagging.fct(ctrl.search);
-            // verify the new tag doesn't match the value of a possible selection choice or an already selected item.
-            if (
-              stashArr.some(function (origItem) {
-                 return ctrl.tagging.equals(origItem, newItem);
-              }) ||
-              ctrl.multiple && ctrl.selected.some(function (origItem) {
-                return ctrl.tagging.equals(origItem, newItem);
-              })
-            ) {
-              $scope.$evalAsync(function () {
-                ctrl.activeIndex = 0;
-                ctrl.items = items;
-              });
-              return;
-            }
-            if (newItem) newItem.isTag = true;
-          // handle newItem string and stripping dupes in tagging string context
-          } else {
-            // find any tagging items already in the ctrl.items array and store them
-            tagItems = ctrl.$filter('filter')(items,function (item) {
-              return item.match(ctrl.taggingLabel);
-            });
-            if ( tagItems.length > 0 ) {
-              tagItem = tagItems[0];
-            }
-            item = items[0];
-            // remove existing tag item if found (should only ever be one tag item)
-            if ( item !== undefined && items.length > 0 && tagItem ) {
-              hasTag = true;
-              items = items.slice(1,items.length);
-              stashArr = stashArr.slice(1,stashArr.length);
-            }
-            newItem = ctrl.search+' '+ctrl.taggingLabel;
-            if ( _findApproxDupe(ctrl.selected, ctrl.search) > -1 ) {
-              return;
-            }
-            // verify the the tag doesn't match the value of an existing item from
-            // the searched data set or the items already selected
-            if ( _findCaseInsensitiveDupe(stashArr.concat(ctrl.selected)) ) {
-              // if there is a tag from prev iteration, strip it / queue the change
-              // and return early
-              if ( hasTag ) {
-                items = stashArr;
-                $scope.$evalAsync( function () {
-                  ctrl.activeIndex = 0;
-                  ctrl.items = items;
-                });
-              }
-              return;
-            }
-            if ( _findCaseInsensitiveDupe(stashArr) ) {
-              // if there is a tag from prev iteration, strip it
-              if ( hasTag ) {
-                ctrl.items = stashArr.slice(1,stashArr.length);
-              }
-              return;
-            }
-          }
-          if ( hasTag ) dupeIndex = _findApproxDupe(ctrl.selected, newItem);
-          // dupe found, shave the first item
-          if ( dupeIndex > -1 ) {
-            items = items.slice(dupeIndex+1,items.length-1);
-          } else {
-            items = [];
-            if (newItem) items.push(newItem);
-            items = items.concat(stashArr);
-          }
-          $scope.$evalAsync( function () {
-            ctrl.activeIndex = 0;
-            ctrl.items = items;
-
-            if (ctrl.isGrouped) {
-              // update item references in groups, so that indexOf will work after angular.copy
-              var itemsWithoutTag = newItem ? items.slice(1) : items;
-              ctrl.setItemsFn(itemsWithoutTag);
-              if (newItem) {
-                // add tag item as a new group
-                ctrl.items.unshift(newItem);
-                ctrl.groups.unshift({name: '', items: [newItem], tagging: true});
-              }
-            }
-          });
-        }
-      });
->>>>>>> e34bffc5335a8e2f1f547081af89169d98a17453
       
   ctrl.searchInput.on('keydown', function(e) {
 

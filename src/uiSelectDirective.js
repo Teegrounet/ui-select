@@ -114,10 +114,6 @@ uis.directive('uiSelect',
           {
             $select.tagging.isActivated = false;
 			$select.tagging.fct = undefined;
-<<<<<<< HEAD
-=======
-			$select.tagging.equals = angular.equals;
->>>>>>> e34bffc5335a8e2f1f547081af89169d98a17453
           }
         });
 		
