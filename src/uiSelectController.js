@@ -37,7 +37,13 @@ uis.controller('uiSelectCtrl',
   ctrl.resetSearchInput = true;
   ctrl.multiple = undefined; // Initialized inside uiSelect directive link function
   ctrl.disableChoiceExpression = undefined; // Initialized inside uiSelectChoices directive link function
+<<<<<<< HEAD
+  ctrl.taggingElement = undefined;
   ctrl.tagging = {isActivated: false, fct: undefined, equals: angular.equals};
+  ctrl.taggingLabel = '(new)';
+=======
+  ctrl.tagging = {isActivated: false, fct: undefined, equals: angular.equals};
+>>>>>>> e34bffc5335a8e2f1f547081af89169d98a17453
   ctrl.taggingTokens = {isActivated: false, tokens: undefined};
   ctrl.lockChoiceExpression = undefined; // Initialized inside uiSelectMatch directive link function
   ctrl.clickTriggeredSelect = false;
@@ -261,16 +267,36 @@ uis.controller('uiSelectCtrl',
         ctrl.items = [];
       } else {
         if (!angular.isArray(items)) {
-          throw uiSelectMinErr('items', "Expected an array but got '{0}'.", items);
+			throw uiSelectMinErr('items', "Expected an array but got '{0}'.", items);
         } else {
-          //Remove already selected items (ex: while searching)
-          //TODO Should add a test
-          ctrl.refreshItems(items);
+			// if tagging is activated and is needed, we add the tagging element in the list
+			if (ctrl.tagging.isActivated && ctrl.taggingElement) {
+				var isTaggingObject = ctrl.tagging.fct !== undefined;
+				var functionToCompare = isTaggingObject ? ctrl.tagging.equals : _compareStringCaseInsensitive;
+				// remove isTag or label to compare
+				var objectToCompare = angular.copy(ctrl.taggingElement);
+				if (isTaggingObject) {
+					objectToCompare.isTag = undefined;
+				} else {
+					objectToCompare = objectToCompare.substring(0, objectToCompare.length - 1 - ctrl.taggingLabel.length);
+				}
+				if (
+					!items.some(function (origItem) {
+						return functionToCompare(origItem, objectToCompare);
+					}) 
+				) {
+					items.unshift(ctrl.taggingElement);
+				}
+			}
+			
+			//Remove already selected items (ex: while searching)
+			//TODO Should add a test
+			ctrl.refreshItems(items);
 
-          //update the view value with fresh data from items, if there is a valid model value
-          if(angular.isDefined(ctrl.ngModel.$modelValue)) {
-            ctrl.ngModel.$modelValue = null; //Force scope model value and ngModel value to be out of sync to re-run formatters
-          }
+			//update the view value with fresh data from items, if there is a valid model value
+			if(angular.isDefined(ctrl.ngModel.$modelValue)) {
+				ctrl.ngModel.$modelValue = null; //Force scope model value and ngModel value to be out of sync to re-run formatters
+			}
         }
       }
     });
@@ -306,7 +332,7 @@ uis.controller('uiSelectCtrl',
     var itemIndex = ctrl.items.indexOf(itemScope[ctrl.itemProperty]);
     var isActive =  itemIndex == ctrl.activeIndex;
 
-    if ( !isActive || ( itemIndex < 0 && ctrl.taggingLabel !== false ) ||( itemIndex < 0 && ctrl.taggingLabel === false) ) {
+    if ( !isActive || itemIndex < 0 ) {
       return false;
     }
 
@@ -346,10 +372,17 @@ uis.controller('uiSelectCtrl',
           // if taggingLabel is disabled, we pull from ctrl.search val
           if ( ctrl.taggingLabel === false ) {
             if ( ctrl.activeIndex < 0 ) {
+<<<<<<< HEAD
+				item = ctrl.tagging.fct !== undefined ? ctrl.tagging.fct(ctrl.search) : ctrl.search;
+				if (!item || ctrl.tagging.equals( ctrl.taggingElement, item ) ) {
+					return;
+				}
+=======
               item = ctrl.tagging.fct !== undefined ? ctrl.tagging.fct(ctrl.search) : ctrl.search;
               if (!item || ctrl.tagging.equals( ctrl.items[0], item ) ) {
                 return;
               }
+>>>>>>> e34bffc5335a8e2f1f547081af89169d98a17453
             } else {
               // keyboard nav happened first, user selected from dropdown
               item = ctrl.items[ctrl.activeIndex];
@@ -517,6 +550,17 @@ uis.controller('uiSelectCtrl',
     return processed;
   }
 
+<<<<<<< HEAD
+	function _compareStringCaseInsensitive(val1, val2) {
+		if ( val1 === undefined || val2 === undefined ) {
+          return false;
+        }
+        return val1.toLowerCase() === val2.toLowerCase();
+    }
+	
+	// Bind to keyboard shortcuts 
+	ctrl.searchInput.on('keyup', function(e) {
+=======
   function _findCaseInsensitiveDupe(arr) {
         if ( arr === undefined || ctrl.search === undefined ) {
           return false;
@@ -559,6 +603,7 @@ uis.controller('uiSelectCtrl',
   // Bind to keyboard shortcuts 
   ctrl.searchInput.on('keyup', function(e) {
 
+>>>>>>> e34bffc5335a8e2f1f547081af89169d98a17453
         if ( ! KEY.isVerticalMovement(e.which) ) {
           $scope.$evalAsync( function () {
             ctrl.activeIndex = ctrl.taggingLabel === false ? -1 : 0;
@@ -576,6 +621,65 @@ uis.controller('uiSelectCtrl',
           // taggingLabel === false bypasses all of this
           if (ctrl.taggingLabel === false) return;
 
+<<<<<<< HEAD
+		  var newItem;
+          var items = angular.copy( ctrl.items );
+          
+		  // remove the first element, if it's the tagging element
+          if (ctrl.taggingElement && items.length > 0 && angular.equals(items[0], ctrl.taggingElement)) {
+			items = items.slice(1,items.length);
+          }
+		  
+          var stashArr = angular.copy( items );
+		  var isTaggingObject = ctrl.tagging.fct !== undefined;
+
+          newItem = isTaggingObject ? ctrl.tagging.fct(ctrl.search) : ctrl.search;
+          
+			// verify the new tag doesn't match the value of a possible selection choice or an already selected item
+			var functionToCompare = isTaggingObject ? ctrl.tagging.equals : _compareStringCaseInsensitive;
+			if (
+				stashArr.some(function (origItem) {
+					return functionToCompare(origItem, newItem);
+				}) || 
+				ctrl.multiple && ctrl.selected.some(function (origItem) {
+					return functionToCompare(origItem, newItem);
+				})
+			) {
+              $scope.$evalAsync(function () {
+                ctrl.activeIndex = 0;
+                ctrl.items = items;
+				ctrl.taggingElement = undefined;
+              });
+              return;
+            }
+			if (newItem)  {
+				if (isTaggingObject) newItem.isTag = true;
+				else newItem = ctrl.search + ' ' + ctrl.taggingLabel;
+			}
+			
+			items = [];
+			if (newItem) items.push(newItem);
+			items = items.concat(stashArr);
+			
+			$scope.$evalAsync( function () {
+				ctrl.activeIndex = 0;
+				ctrl.items = items;
+				ctrl.taggingElement = newItem;
+
+				if (ctrl.isGrouped) {
+				  // update item references in groups, so that indexOf will work after angular.copy
+				  var itemsWithoutTag = newItem ? items.slice(1) : items;
+				  ctrl.setItemsFn(itemsWithoutTag);
+				  if (newItem) {
+					// add tag item as a new group
+					ctrl.items.unshift(newItem);
+					ctrl.groups.unshift({name: '', items: [newItem], tagging: true});
+				  }
+				}
+			});
+		}
+	});	
+=======
           var items = angular.copy( ctrl.items );
           var stashArr = angular.copy( ctrl.items );
           var newItem;
@@ -682,6 +786,7 @@ uis.controller('uiSelectCtrl',
           });
         }
       });
+>>>>>>> e34bffc5335a8e2f1f547081af89169d98a17453
       
   ctrl.searchInput.on('keydown', function(e) {
 
