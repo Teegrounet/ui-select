@@ -38,6 +38,7 @@ uis.controller('uiSelectCtrl',
   ctrl.multiple = undefined; // Initialized inside uiSelect directive link function
   ctrl.disableChoiceExpression = undefined; // Initialized inside uiSelectChoices directive link function
   ctrl.tagging = {isActivated: false, fct: undefined};
+  ctrl.taggingLabel = '(new)';
   ctrl.taggingTokens = {isActivated: false, tokens: undefined};
   ctrl.lockChoiceExpression = undefined; // Initialized inside uiSelectMatch directive link function
   ctrl.clickTriggeredSelect = false;
