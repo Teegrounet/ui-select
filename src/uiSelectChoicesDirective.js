@@ -1,82 +1,354 @@
-uis.directive('uiSelectChoices',
-  ['uiSelectConfig', 'uisRepeatParser', 'uiSelectMinErr', '$compile', '$window',
-  function(uiSelectConfig, RepeatParser, uiSelectMinErr, $compile, $window) {
-
+uis.directive('uiSelectMultiple', ['uiSelectMinErr','$timeout', function(uiSelectMinErr, $timeout) {
   return {
     restrict: 'EA',
-    require: '^uiSelect',
-    replace: true,
-    transclude: true,
-    templateUrl: function(tElement) {
-      // Needed so the uiSelect can detect the transcluded content
-      tElement.addClass('ui-select-choices');
+    require: ['^uiSelect', '^ngModel'],
 
-      // Gets theme attribute from parent (ui-select)
-      var theme = tElement.parent().attr('theme') || uiSelectConfig.theme;
-      return theme + '/choices.tpl.html';
-    },
+    controller: ['$scope','$timeout', function($scope, $timeout){
 
-    compile: function(tElement, tAttrs) {
+      var ctrl = this,
+          $select = $scope.$select,
+          ngModel;
 
-      if (!tAttrs.repeat) throw uiSelectMinErr('repeat', "Expected 'repeat' expression.");
+      if (angular.isUndefined($select.selected))
+        $select.selected = [];
 
-      return function link(scope, element, attrs, $select, transcludeFn) {
+      //Wait for link fn to inject it
+      $scope.$evalAsync(function(){ ngModel = $scope.ngModel; });
 
-        // var repeat = RepeatParser.parse(attrs.repeat);
-        var groupByExp = attrs.groupBy;
-        var groupFilterExp = attrs.groupFilter;
+      ctrl.activeMatchIndex = -1;
 
-        $select.parseRepeatAttr(attrs.repeat, groupByExp, groupFilterExp); //Result ready at $select.parserResult
+      ctrl.updateModel = function(){
+        ngModel.$setViewValue(Date.now()); //Set timestamp as a unique string to force changes
+        ctrl.refreshComponent();
+      };
 
-        $select.disableChoiceExpression = attrs.uiDisableChoice;
-        $select.onHighlightCallback = attrs.onHighlight;
+      ctrl.refreshComponent = function(){
+        //Remove already selected items
+        //e.g. When user clicks on a selection, the selected array changes and
+        //the dropdown should remove that item
+        $select.refreshItems();
+        $select.sizeSearchInput();
+      };
 
-        $select.dropdownPosition = attrs.position ? attrs.position.toLowerCase() : uiSelectConfig.dropdownPosition;
+      // Remove item from multiple select
+      ctrl.removeChoice = function(index){
 
-        if(groupByExp) {
-          var groups = element.querySelectorAll('.ui-select-choices-group');
-          if (groups.length !== 1) throw uiSelectMinErr('rows', "Expected 1 .ui-select-choices-group but got '{0}'.", groups.length);
-          groups.attr('ng-repeat', RepeatParser.getGroupNgRepeatExpression());
+        var removedChoice = $select.selected[index];
+
+        // if the choice is locked, can't remove it
+        if(removedChoice._uiSelectChoiceLocked) return;
+
+        var locals = {};
+        locals[$select.parserResult.itemName] = removedChoice;
+
+        $select.selected.splice(index, 1);
+        ctrl.activeMatchIndex = -1;
+        $select.sizeSearchInput();
+
+        // Give some time for scope propagation.
+        $timeout(function(){
+          $select.onRemoveCallback($scope, {
+            $item: removedChoice,
+            $model: $select.parserResult.modelMapper($scope, locals)
+          });
+        });
+
+        ctrl.updateModel();
+
+      };
+
+      ctrl.getPlaceholder = function(){
+        //Refactor single?
+        if($select.selected && $select.selected.length) return;
+        return $select.placeholder;
+      };
+
+
+    }],
+    controllerAs: '$selectMultiple',
+
+    link: function(scope, element, attrs, ctrls) {
+
+      var $select = ctrls[0];
+      var ngModel = scope.ngModel = ctrls[1];
+      var $selectMultiple = scope.$selectMultiple;
+
+      //$select.selected = raw selected objects (ignoring any property binding)
+
+      $select.multiple = true;
+      $select.removeSelected = true;
+
+      //Input that will handle focus
+      $select.focusInput = $select.searchInput;
+
+      //Properly check for empty if set to multiple
+      ngModel.$isEmpty = function(value) {
+        return !value || value.length === 0;
+      };
+
+      //From view --> model
+      ngModel.$parsers.unshift(function () {
+        var locals = {},
+            result,
+            resultMultiple = [];
+        for (var j = $select.selected.length - 1; j >= 0; j--) {
+          locals = {};
+          locals[$select.parserResult.itemName] = $select.selected[j];
+          result = $select.parserResult.modelMapper(scope, locals);
+          resultMultiple.unshift(result);
         }
+        return resultMultiple;
+      });
 
-        var choices = element.querySelectorAll('.ui-select-choices-row');
-        if (choices.length !== 1) {
-          throw uiSelectMinErr('rows', "Expected 1 .ui-select-choices-row but got '{0}'.", choices.length);
+      // From model --> view
+      ngModel.$formatters.unshift(function (inputValue) {
+        var data = $select.parserResult.source (scope, { $select : {search:''}}), //Overwrite $search
+            locals = {},
+            result;
+        if (!data) return inputValue;
+        var resultMultiple = [];
+        var checkFnMultiple = function(list, value){
+          if (!list || !list.length) return;
+          for (var p = list.length - 1; p >= 0; p--) {
+            locals[$select.parserResult.itemName] = list[p];
+            result = $select.parserResult.modelMapper(scope, locals);
+            if($select.parserResult.trackByExp){
+                var propsItemNameMatches = /(\w*)\./.exec($select.parserResult.trackByExp);
+                var matches = /\.([^\s]+)/.exec($select.parserResult.trackByExp);
+                if(propsItemNameMatches && propsItemNameMatches.length > 0 && propsItemNameMatches[1] == $select.parserResult.itemName){
+                  if(matches && matches.length>0 && result[matches[1]] == value[matches[1]]){
+                      resultMultiple.unshift(list[p]);
+                      return true;
+                  }
+                }
+            }
+            if (angular.equals(result,value)){
+              resultMultiple.unshift(list[p]);
+              return true;
+            }
+          }
+          return false;
+        };
+        if (!inputValue) return resultMultiple; //If ngModel was undefined
+        for (var k = inputValue.length - 1; k >= 0; k--) {
+          //Check model array of currently selected items
+          if (!checkFnMultiple($select.selected, inputValue[k])){
+            //Check model array of all items available
+            if (!checkFnMultiple(data, inputValue[k])){
+              //If not found on previous lists, just add it directly to resultMultiple
+              resultMultiple.unshift(inputValue[k]);
+            }
+          }
         }
+        return resultMultiple;
+      });
 
-        choices.attr('ng-repeat', $select.parserResult.repeatExpression(groupByExp))
-            .attr('ng-if', '$select.open'); //Prevent unnecessary watches when dropdown is closed
-        if ($window.document.addEventListener) {  //crude way to exclude IE8, specifically, which also cannot capture events
-          choices.attr('ng-mouseenter', '$select.setActiveItem('+$select.parserResult.itemName +')')
-              .attr('ng-click', '$select.select(' + $select.parserResult.itemName + ',$select.skipFocusser,$event)');
+      //Watch for external model changes
+      scope.$watchCollection(function(){ return ngModel.$modelValue; }, function(newValue, oldValue) {
+        if (oldValue != newValue){
+          //update the view value with fresh data from items, if there is a valid model value
+          if(angular.isDefined(ngModel.$modelValue)) {
+            ngModel.$modelValue = null; //Force scope model value and ngModel value to be out of sync to re-run formatters
+          }
+          $selectMultiple.refreshComponent();
         }
+      });
 
-        var rowsInner = element.querySelectorAll('.ui-select-choices-row-inner');
-        if (rowsInner.length !== 1) throw uiSelectMinErr('rows', "Expected 1 .ui-select-choices-row-inner but got '{0}'.", rowsInner.length);
-        rowsInner.attr('uis-transclude-append', ''); //Adding uisTranscludeAppend directive to row element after choices element has ngRepeat
-        if (!$window.document.addEventListener) {  //crude way to target IE8, specifically, which also cannot capture events - so event bindings must be here
-          rowsInner.attr('ng-mouseenter', '$select.setActiveItem('+$select.parserResult.itemName +')')
-              .attr('ng-click', '$select.select(' + $select.parserResult.itemName + ',$select.skipFocusser,$event)');
-        }
-
-        $compile(element, transcludeFn)(scope); //Passing current transcludeFn to be able to append elements correctly from uisTranscludeAppend
-
-        scope.$watch('$select.search', function(newValue) {
-          if(newValue && !$select.open && $select.multiple) $select.activate(false, true);
-          $select.activeIndex = $select.tagging.isActivated ? -1 : 0;
-          if (!attrs.minimumInputLength || $select.search.length >= attrs.minimumInputLength) {
-            $select.refresh(attrs.refresh);
+      ngModel.$render = function() {
+        // Make sure that model value is array
+        if(!angular.isArray(ngModel.$viewValue)){
+          // Have tolerance for null or undefined values
+          if(angular.isUndefined(ngModel.$viewValue) || ngModel.$viewValue === null){
+            $select.selected = [];
           } else {
-            $select.items = [];
+            throw uiSelectMinErr('multiarr', "Expected model value to be array but got '{0}'", ngModel.$viewValue);
+          }
+        }
+        $select.selected = ngModel.$viewValue;
+        $selectMultiple.refreshComponent();
+        scope.$evalAsync(); //To force $digest
+      };
+
+      scope.$on('uis:select', function (event, item) {
+        if($select.selected.length >= $select.limit) {
+          return;
+        }
+        $select.selected.push(item);
+        $selectMultiple.updateModel();
+      });
+
+      scope.$on('uis:activate', function () {
+        $selectMultiple.activeMatchIndex = -1;
+      });
+
+      scope.$watch('$select.disabled', function(newValue, oldValue) {
+        // As the search input field may now become visible, it may be necessary to recompute its size
+        if (oldValue && !newValue) $select.sizeSearchInput();
+      });
+
+      $select.searchInput.on('keydown', function(e) {
+        var key = e.which;
+        scope.$apply(function() {
+          var processed = false;
+          // var tagged = false; //Checkme
+          if(KEY.isHorizontalMovement(key)){
+            processed = _handleMatchSelection(key);
+          }
+          if (processed  && key != KEY.TAB) {
+            //TODO Check si el tab selecciona aun correctamente
+            //Crear test
+            e.preventDefault();
+            e.stopPropagation();
           }
         });
+      });
+      function _getCaretPosition(el) {
+        if(angular.isNumber(el.selectionStart)) return el.selectionStart;
+        // selectionStart is not supported in IE8 and we don't want hacky workarounds so we compromise
+        else return el.value.length;
+      }
+      // Handles selected options in "multiple" mode
+      function _handleMatchSelection(key){
+        var caretPosition = _getCaretPosition($select.searchInput[0]),
+            length = $select.selected.length,
+            // none  = -1,
+            first = 0,
+            last  = length-1,
+            curr  = $selectMultiple.activeMatchIndex,
+            next  = $selectMultiple.activeMatchIndex+1,
+            prev  = $selectMultiple.activeMatchIndex-1,
+            newIndex = curr;
 
-        attrs.$observe('refreshDelay', function() {
-          // $eval() is needed otherwise we get a string instead of a number
-          var refreshDelay = scope.$eval(attrs.refreshDelay);
-          $select.refreshDelay = refreshDelay !== undefined ? refreshDelay : uiSelectConfig.refreshDelay;
+        if(caretPosition > 0 || ($select.search.length && key == KEY.RIGHT)) return false;
+
+        $select.close();
+
+        function getNewActiveMatchIndex(){
+          switch(key){
+            case KEY.LEFT:
+              // Select previous/first item
+              if(~$selectMultiple.activeMatchIndex) return prev;
+              // Select last item
+              else return last;
+              break;
+            case KEY.RIGHT:
+              // Open drop-down
+              if(!~$selectMultiple.activeMatchIndex || curr === last){
+                $select.activate();
+                return false;
+              }
+              // Select next/last item
+              else return next;
+              break;
+            case KEY.BACKSPACE:
+              // Remove selected item and select previous/first
+              if(~$selectMultiple.activeMatchIndex){
+                $selectMultiple.removeChoice(curr);
+                return prev;
+              }
+              // Select last item
+              else return last;
+              break;
+            case KEY.DELETE:
+              // Remove selected item and select next item
+              if(~$selectMultiple.activeMatchIndex){
+                $selectMultiple.removeChoice($selectMultiple.activeMatchIndex);
+                return curr;
+              }
+              else return false;
+          }
+        }
+
+        newIndex = getNewActiveMatchIndex();
+
+        if(!$select.selected.length || newIndex === false) $selectMultiple.activeMatchIndex = -1;
+        else $selectMultiple.activeMatchIndex = Math.min(last,Math.max(first,newIndex));
+
+        return true;
+      }
+
+      $select.searchInput.on('keyup', function(e) {
+
+        if ( ! KEY.isVerticalMovement(e.which) ) {
+          scope.$evalAsync( function () {
+            $select.activeIndex = $select.taggingLabel === false ? -1 : 0;
+          });
+        }
+        // Push a "create new" item into array if there is a search string
+        if ( $select.tagging.isActivated && $select.search.length > 0 ) {
+
+          // return early with these keys
+          if (e.which === KEY.TAB || KEY.isControl(e) || KEY.isFunctionKey(e) || e.which === KEY.ESC || KEY.isVerticalMovement(e.which) ) {
+            return;
+          }
+          // always reset the activeIndex to the first item when tagging
+          $select.activeIndex = $select.taggingLabel === false ? -1 : 0;
+          // taggingLabel === false bypasses all of this
+          if ($select.taggingLabel === false) return;
+
+          var items = angular.copy( $select.items );
+          var newItem;
+          
+          // remove the first element, if it has the `isTag` prop we generate a new one with each keyup, shaving the previous
+          if ( ctrl.taggingElement.isActive===true && items.length > 0 && angular.equals(items[0], ctrl.taggingElement.withTag) ) {
+            items = items.slice(1,items.length);
+          }
+          
+          var isTaggingObject = ctrl.tagging.fct !== undefined;
+          newItem = isTaggingObject ? ctrl.tagging.fct(ctrl.search) : ctrl.search;
+          
+          var functionToCompare = isTaggingObject ? ctrl.tagging.equals : _compareCaseInsensitive;
+          
+          if (
+            !ctrl.search
+            ||
+            items.some(function (origItem) {
+              return functionToCompare(origItem, newItem);
+            })
+            ||
+            ctrl.multiple && ctrl.selected.some(function (origItem) {
+              return functionToCompare(origItem, newItem);
+            })
+          ) {
+            scope.$evalAsync(function () {
+              $select.activeIndex = 0;
+              ctrl.taggingElement = {isActive: false};
+              $select.items = items;
+            });
+          }
+          
+          scope.$evalAsync( function () {
+            if (newItem)  {
+              ctrl.taggingElement.withoutTag = newItem;
+              if (isTaggingObject) {
+                newItem.isTag = true;
+              } else {
+                newItem = ctrl.search + ' ' + ctrl.taggingLabel;
+              }
+              ctrl.taggingElement.withTag = newItem;
+              
+              items.unshift(newItem);
+            }
+            
+            $select.activeIndex = 0;
+            ctrl.taggingElement.isActive = true;
+            $select.setItemsFn(items);
+          });
+        }
+      });
+      function _compareCaseInsensitive(val1, val2) {
+        if ( val1 === undefined || val2 === undefined ) {
+          return false;
+        }
+        return val1.toLowerCase() === val2.toLowerCase();
+      }
+
+      $select.searchInput.on('blur', function() {
+        $timeout(function() {
+          $selectMultiple.activeMatchIndex = -1;
         });
-      };
+      });
+
     }
   };
 }]);
