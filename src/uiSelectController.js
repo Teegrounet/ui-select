@@ -37,6 +37,7 @@ uis.controller('uiSelectCtrl',
   ctrl.resetSearchInput = true;
   ctrl.multiple = undefined; // Initialized inside uiSelect directive link function
   ctrl.disableChoiceExpression = undefined; // Initialized inside uiSelectChoices directive link function
+  ctrl.taggingElement = {isActive: false};
   ctrl.tagging = {isActivated: false, fct: undefined};
   ctrl.taggingTokens = {isActivated: false, tokens: undefined};
   ctrl.lockChoiceExpression = undefined; // Initialized inside uiSelectMatch directive link function
@@ -328,7 +329,7 @@ uis.controller('uiSelectCtrl',
           if ( ctrl.taggingLabel === false ) {
             if ( ctrl.activeIndex < 0 ) {
               item = ctrl.tagging.fct !== undefined ? ctrl.tagging.fct(ctrl.search) : ctrl.search;
-              if (!item || angular.equals( ctrl.items[0], item ) ) {
+              if (!item || ctrl.taggingElement.isActive === true && angular.equals( ctrl.taggingElement.withoutTag, item ) {
                 return;
               }
             } else {
@@ -343,15 +344,10 @@ uis.controller('uiSelectCtrl',
               // for `item` if it is a detected duplicate
               if ( item === undefined ) return;
 
-              // create new item on the fly if we don't already have one;
-              // use tagging function if we have one
-              if ( ctrl.tagging.fct !== undefined && typeof item === 'string' ) {
-                item = ctrl.tagging.fct(item);
+              // take tagging element if exist, keyup throw before
+              if ( ctrl.taggingElement.isActive && typeof item === 'string' ) {
+                item = ctrl.taggingElement.withoutTag;
                 if (!item) return;
-              // if item type is 'string', apply the tagging label
-              } else if ( typeof item === 'string' ) {
-                // trim the trailing space
-                item = item.replace(ctrl.taggingLabel,'').trim();
               }
             }
           }
